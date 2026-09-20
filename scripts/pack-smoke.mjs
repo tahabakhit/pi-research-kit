@@ -11,7 +11,10 @@ assert.ok(npm, 'Run through npm run pack:smoke');
 const root = await mkdtemp(join(tmpdir(), 'research-kit-pack-'));
 const pkgRoot = process.cwd();
 function npmRun(args, cwd) {
-  const result = spawnSync(process.execPath, [npm, ...args], {cwd, encoding:'utf8',timeout:180000});
+  // Clean dependency extraction is substantially slower on hosted Windows ARM runners.
+  const timeout = args[0] === 'install' ? 600000 : 60000;
+  const result = spawnSync(process.execPath, [npm, ...args], {cwd, encoding:'utf8',timeout});
+  assert.ifError(result.error);
   assert.equal(result.status, 0, `npm ${args[0]} failed: ${result.stderr}`);
   return result.stdout;
 }
