@@ -4,7 +4,7 @@
 
 Pi Research Kit is a native Pi extension for bounded web retrieval and evidence-oriented research. It combines pinned [Ketch](https://github.com/1broseidon/ketch) retrieval with dated evidence workflows, a local research library, watchlists, exports, and explicitly configured publication or handoff destinations.
 
-MIT licensed; see [LICENSE](LICENSE). The package name is `@tahabakhit/pi-research-kit`. Source installation is available now; npm distribution is not yet available.
+MIT licensed; see [LICENSE](LICENSE). The package name is `@tahabakhit/pi-research-kit`. Install from GitHub using Pi's native package mechanism below.
 
 ## Install from GitHub
 
