@@ -1,0 +1,51 @@
+{
+  "name": "@tahabakhit/pi-research-kit",
+  "version": "0.1.0",
+  "description": "Ketch-powered web tools and evidence-based research workflows for Pi.",
+  "type": "module",
+  "publishConfig": { "access": "public" },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tahabakhit/pi-research-kit"
+  },
+  "homepage": "https://github.com/tahabakhit/pi-research-kit",
+  "bugs": {
+    "url": "https://github.com/tahabakhit/pi-research-kit/issues"
+  },
+  "keywords": ["pi-package", "pi", "research", "ketch", "web-search"],
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "files": ["index.ts", "src", "README.md", "LICENSE", "skills"],
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --test tests/*.test.ts",
+    "pack:check": "npm pack --dry-run",
+    "pack:smoke": "node scripts/pack-smoke.mjs",
+    "ci": "npm ci --ignore-scripts && npm test && npm run typecheck && npm run pack:check",
+    "prepublishOnly": "npm test && npm run typecheck"
+  },
+  "pi": {
+    "extensions": ["./index.ts"],
+    "skills": ["./skills"]
+  },
+  "exports": {
+    ".": "./index.ts",
+    "./ketch/client": "./src/ketch/client.ts",
+    "./tools": "./src/tools/index.ts",
+    "./research": "./src/research/index.ts"
+  },
+  "dependencies": {
+    "ketch-cli": "0.17.1"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.2",
+    "typescript": "5.9.3"
+  }
+}
