@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, realpath, rm, stat, mkdir } from "node:fs/promises";
 import { test } from "node:test";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { DefaultResourceLoader } from "@earendil-works/pi-coding-agent";
 
 const KETCH_TOOLS = [
@@ -28,7 +28,7 @@ const RESEARCH_TOOLS = [
 const WORKFLOW_TOOLS = ["research_compare", "research_discover", "research_export"] as const;
 const EXPECTED_TOOLS = [...KETCH_TOOLS, ...RESEARCH_TOOLS, ...WORKFLOW_TOOLS];
 
-const extensionRoot = resolve(dirname(new URL(import.meta.url).pathname), "..");
+const extensionRoot = resolve(import.meta.dirname, "..");
 const extensionIndex = join(extensionRoot, "index.ts");
 
 async function exists(path: string): Promise<boolean> {

@@ -1,8 +1,18 @@
 # Pi Research Kit
 
+[![CI](https://github.com/tahabakhit/pi-research-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/tahabakhit/pi-research-kit/actions/workflows/ci.yml)
+
 Pi Research Kit is a native Pi extension for bounded web retrieval and evidence-oriented research. It combines pinned [Ketch](https://github.com/1broseidon/ketch) retrieval with dated evidence workflows, a local research library, watchlists, exports, and explicitly configured publication or handoff destinations.
 
-The package is MIT licensed; see [LICENSE](LICENSE). It is prepared as the public npm package `@tahabakhit/pi-research-kit`. This documentation does not claim that an npm release has been published or that the CI matrix has passed.
+MIT licensed; see [LICENSE](LICENSE). The package name is `@tahabakhit/pi-research-kit`. Source installation is available now; npm distribution is not yet available.
+
+## Install from GitHub
+
+```sh
+pi install git:github.com/tahabakhit/pi-research-kit
+```
+
+Reload Pi after installation. Avoid loading another extension that registers the same web tool aliases.
 
 ## Requirements
 
@@ -27,7 +37,7 @@ pi --no-extensions -e ./index.ts --skill ./skills/research-kit
 
 The last command starts an interactive Pi session without other extensions, which avoids duplicate tool names. It does not install or publish anything. Review dependencies and configuration before enabling network or write operations.
 
-The package can also be loaded through Pi's native package mechanism after it is available from the chosen package source.
+The GitHub installation above uses Pi's native package mechanism.
 
 ## Tools
 
@@ -124,7 +134,7 @@ npm run pack:check
 npm run pack:smoke
 ```
 
-`.github/workflows/ci.yml` is a standalone package-root workflow with a six-platform macOS, Linux, and Windows x64/arm64 matrix on Node 22.19. The matrix is configured for release review; this README makes no claim that those jobs have run or passed.
+`.github/workflows/ci.yml` is a standalone package-root workflow with a six-platform macOS, Linux, and Windows x64/arm64 matrix on Node 22.19. Each job runs fixture tests, strict typechecking, and a clean production-tarball installation. The badge links to actual run results. Windows transcript-helper execution is tested as deliberately unsupported; it is not silently counted as working caption retrieval.
 
 ## Provenance
 
