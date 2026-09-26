@@ -7,6 +7,9 @@ export const POLYMARKET_PUBLIC_SEARCH_ENDPOINT = "https://gamma-api.polymarket.c
 export const X_RECENT_SEARCH_ENDPOINT = "https://api.x.com/2/tweets/search/recent";
 export const YOUTUBE_SEARCH_ENDPOINT = "https://www.googleapis.com/youtube/v3/search";
 export const YOUTUBE_COMMENT_THREADS_ENDPOINT = "https://www.googleapis.com/youtube/v3/commentThreads";
+export const BLUESKY_CREATE_SESSION_ENDPOINT = "https://bsky.social/xrpc/com.atproto.server.createSession";
+export const BLUESKY_SEARCH_POSTS_ENDPOINT = "https://bsky.social/xrpc/app.bsky.feed.searchPosts";
+const BLUESKY_MAX_RESULTS = 25;
 const X_RECENT_WINDOW_MS = 7 * 86_400_000;
 
 type RecordValue = Record<string, unknown>;
@@ -16,6 +19,10 @@ export interface SocialSourceAdapterOptions extends SourceAdapterOptions {
   xBearerToken?: string;
   /** Explicit operator-supplied YouTube Data API key. It is never read from process.env. */
   youtubeApiKey?: string;
+  /** Explicit operator-supplied Bluesky handle. It is never read from process.env. */
+  blueskyHandle?: string;
+  /** Explicit operator-supplied Bluesky app password. It is never read from process.env. */
+  blueskyAppPassword?: string;
 }
 
 export interface SourceCoverageMetadata {
@@ -483,6 +490,119 @@ export function createYouTubeAdapter(options: YouTubeAdapterOptions = {}): Sourc
   };
 }
 
+export interface BlueskyAdapterOptions extends SourceAdapterOptions {
+  /** Explicit operator-supplied handle or DID used as the session identifier. */
+  handle?: string;
+  /** Explicit operator-supplied app password; sent only to createSession. */
+  appPassword?: string;
+}
+
+function blueskyPostUrl(uri: unknown, author: RecordValue | null): string | undefined {
+  const match = text(uri)?.match(/^at:\/\/([^/]+)\/app\.bsky\.feed\.post\/([A-Za-z0-9._:~-]{1,512})$/);
+  if (!match) return undefined;
+  const handle = text(author?.handle);
+  const did = text(author?.did) ?? match[1];
+  const actor = handle && handle !== "handle.invalid" && /^[A-Za-z0-9.-]+$/.test(handle) ? handle : did;
+  if (!actor || !/^[A-Za-z0-9.:_-]+$/.test(actor)) return undefined;
+  return `https://bsky.app/profile/${encodeURIComponent(actor)}/post/${encodeURIComponent(match[2] as string)}`;
+}
+
+function normalizeBluesky(value: unknown): RecordValue[] {
+  const payload = record(value);
+  if (!payload || !Array.isArray(payload.posts)) throw new SourceAdapterError("Bluesky returned an unknown response schema.", "schema");
+  const items: RecordValue[] = [];
+  for (const raw of payload.posts) {
+    const post = record(raw);
+    const author = record(post?.author);
+    const postRecord = record(post?.record);
+    const url = blueskyPostUrl(post?.uri, author);
+    const postText = text(postRecord?.text);
+    const publishedAt = date(postRecord?.createdAt) ?? date(post?.indexedAt);
+    if (!url || !postText || !publishedAt) continue;
+    const handle = text(author?.handle);
+    const likes = nonNegativeNumber(post?.likeCount);
+    const replies = nonNegativeNumber(post?.replyCount);
+    items.push({
+      title: `Bluesky post by ${handle ? `@${handle}` : "an account"}`,
+      url,
+      snippet: postText,
+      publishedAt,
+      ...(handle ? { author: handle } : {}),
+      ...((likes !== undefined || replies !== undefined) ? { engagement: { ...(likes !== undefined ? { score: likes } : {}), ...(replies !== undefined ? { comments: replies } : {}) } } : {}),
+    });
+  }
+  if (payload.posts.length > 0 && items.length === 0) throw new SourceAdapterError("Bluesky returned no posts matching its documented schema.", "schema");
+  return items;
+}
+
+export function createBlueskyAdapter(options: BlueskyAdapterOptions = {}): SourceAdapter {
+  const { handle: rawHandle, appPassword: rawPassword, ...sourceOptions } = options;
+  const identifier = rawHandle?.trim();
+  const password = rawPassword?.trim();
+  // The access token lives only in this closure for the life of the process.
+  let session: Promise<string> | undefined;
+
+  const createSession = async (requestOptions: SearchOptions): Promise<string> => {
+    let payload: unknown;
+    try {
+      payload = await fetchSourceJson(BLUESKY_CREATE_SESSION_ENDPOINT, {
+        method: "POST",
+        headers: { accept: "application/json", "content-type": "application/json" },
+        body: JSON.stringify({ identifier, password }),
+      }, { ...sourceOptions, signal: requestOptions.signal });
+    } catch (error) {
+      if (!(error instanceof SourceAdapterError)) throw error;
+      // Report only the status class; the request body carried the password.
+      const status = error.httpStatus;
+      const code = status === 400 || status === 401 ? "auth_required" : error.code;
+      throw new SourceAdapterError(`Bluesky authentication failed${status ? ` (HTTP ${status})` : ""}.`, code, { httpStatus: status });
+    }
+    const accessJwt = text(record(payload)?.accessJwt);
+    if (!accessJwt) throw new SourceAdapterError("Bluesky createSession returned an unknown response schema.", "schema");
+    return accessJwt;
+  };
+
+  const token = (requestOptions: SearchOptions): Promise<string> => {
+    if (!session) {
+      const pending = createSession(requestOptions);
+      session = pending;
+      pending.catch(() => { if (session === pending) session = undefined; });
+    }
+    return session;
+  };
+
+  return {
+    id: "bluesky",
+    label: "Bluesky (authenticated post search)",
+    capabilities: ["search"],
+    async search(query, searchOptions = {}) {
+      if (!identifier || !password) throw new SourceAdapterError("Bluesky is unconfigured; an explicit handle and app password are required.", "auth_required");
+      const url = new URL(BLUESKY_SEARCH_POSTS_ENDPOINT);
+      url.searchParams.set("q", query);
+      url.searchParams.set("sort", "latest");
+      url.searchParams.set("limit", String(Math.min(limit(searchOptions), BLUESKY_MAX_RESULTS)));
+      const since = dateOption(searchOptions.after);
+      const until = dateOption(searchOptions.before);
+      if (since) url.searchParams.set("since", since.toISOString());
+      if (until) url.searchParams.set("until", until.toISOString());
+      const request = (accessJwt: string) => fetchSourceJson(url.toString(), { headers: { accept: "application/json", authorization: `Bearer ${accessJwt}` } }, { ...sourceOptions, ...searchOptions });
+      const reused = session !== undefined;
+      const current = token(searchOptions);
+      const accessJwt = await current;
+      try {
+        return normalizeBluesky(await request(accessJwt));
+      } catch (error) {
+        // An expired access token is reported as 401, or as 400 ExpiredToken by
+        // the PDS. Re-create the session once, and only for a reused token.
+        const status = error instanceof SourceAdapterError ? error.httpStatus : undefined;
+        if (!(status === 401 || (reused && status === 400))) throw error;
+        if (session === current) session = undefined;
+        return normalizeBluesky(await request(await token(searchOptions)));
+      }
+    },
+  };
+}
+
 export function createPublicSocialSourceAdapters(options: SourceAdapterOptions = {}): readonly SourceAdapter[] {
   return [createRedditAdapter(options), createPolymarketAdapter(options)];
 }
@@ -491,6 +611,10 @@ export function createSocialSourceAdapters(options: SocialSourceAdapterOptions =
   const adapters: SourceAdapter[] = [...createPublicSocialSourceAdapters(options)];
   if (options.xBearerToken?.trim()) adapters.push(createXAdapter({ ...options, bearerToken: options.xBearerToken }));
   if (options.youtubeApiKey?.trim()) adapters.push(createYouTubeAdapter({ ...options, apiKey: options.youtubeApiKey }));
+  if (options.blueskyHandle?.trim() && options.blueskyAppPassword?.trim()) {
+    const { blueskyHandle, blueskyAppPassword, xBearerToken: _x, youtubeApiKey: _y, ...sourceOptions } = options;
+    adapters.push(createBlueskyAdapter({ ...sourceOptions, handle: blueskyHandle, appPassword: blueskyAppPassword }));
+  }
   return adapters;
 }
 
@@ -498,3 +622,4 @@ export const createRedditSourceAdapter = createRedditAdapter;
 export const createPolymarketSourceAdapter = createPolymarketAdapter;
 export const createXSourceAdapter = createXAdapter;
 export const createYouTubeSourceAdapter = createYouTubeAdapter;
+export const createBlueskySourceAdapter = createBlueskyAdapter;

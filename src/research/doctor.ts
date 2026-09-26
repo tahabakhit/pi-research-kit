@@ -2,7 +2,7 @@ import { access, constants } from "node:fs/promises";
 import type { DoctorReport, KetchResearchDeps, SourceAdapter, SourceStatus } from "./types.ts";
 import { defaultResearchRoot } from "./library.ts";
 
-const EXPECTED_OPTIONAL_SOURCES = ["x", "youtube", "reddit", "hacker-news", "github", "polymarket"] as const;
+const EXPECTED_OPTIONAL_SOURCES = ["x", "youtube", "bluesky", "reddit", "hacker-news", "github", "polymarket"] as const;
 
 export async function doctorResearch(
   deps: Partial<KetchResearchDeps>,

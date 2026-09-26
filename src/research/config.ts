@@ -3,11 +3,12 @@ import { createGitHubPublication } from './github-publish.ts';
 import { createTranscriptFetcher } from './transcripts.ts';
 import type { PublicationContract, SourceAdapter } from './types.ts';
 
-/** Operator opt-ins only; never consult ambient GH_TOKEN, X tokens, or Google keys. */
+/** Operator opt-ins only; never consult ambient GH_TOKEN, X tokens, Google keys, or Bluesky credentials. */
 export function configuredResearchAdapters(env: NodeJS.ProcessEnv = process.env): readonly SourceAdapter[] {
   const adapters = [...createDefaultSourceAdapters({
     ...(env.PI_RESEARCH_ENABLE_X === '1' && env.PI_RESEARCH_X_BEARER_TOKEN ? {xBearerToken:env.PI_RESEARCH_X_BEARER_TOKEN} : {}),
     ...(env.PI_RESEARCH_ENABLE_YOUTUBE === '1' && env.PI_RESEARCH_YOUTUBE_API_KEY ? {youtubeApiKey:env.PI_RESEARCH_YOUTUBE_API_KEY} : {}),
+    ...(env.PI_RESEARCH_ENABLE_BLUESKY === '1' && env.PI_RESEARCH_BLUESKY_HANDLE && env.PI_RESEARCH_BLUESKY_APP_PASSWORD ? {blueskyHandle:env.PI_RESEARCH_BLUESKY_HANDLE,blueskyAppPassword:env.PI_RESEARCH_BLUESKY_APP_PASSWORD} : {}),
   })];
   if (env.PI_RESEARCH_ENABLE_TRANSCRIPTS === '1' && env.PI_RESEARCH_YTDLP_BIN) adapters.push(createTranscriptFetcher({ executable: env.PI_RESEARCH_YTDLP_BIN }));
   return adapters;

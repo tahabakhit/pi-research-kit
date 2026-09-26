@@ -2,6 +2,7 @@ import type { AgentToolUpdateCallback, ExtensionAPI, ToolDefinition } from "@ear
 import { Type } from "typebox";
 import {
   boundedInteger,
+  configuredKetchBackendArgs,
   fetchEvidence,
   KetchClient,
   KetchError,
@@ -221,6 +222,7 @@ function makeTools(deps: KetchToolDeps): AnyTool[] {
       if (params.scrape) args.push("--scrape");
       if (params.multi) args.push(`--multi=${params.multi}`);
       if (params.random) args.push(`--random=${params.random}`);
+      if (!params.backend && !params.multi && !params.random) args.push(...configuredKetchBackendArgs());
       args.push(...optionArgs(params), "--", params.query);
       return executeCommand("search", args, deps, signal, onUpdate);
     },

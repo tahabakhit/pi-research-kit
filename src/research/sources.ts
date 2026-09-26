@@ -15,6 +15,7 @@ const APPROVED_SOURCE_HOSTS = new Set([
   "gamma-api.polymarket.com",
   "api.x.com",
   "www.googleapis.com",
+  "bsky.social",
 ]);
 
 export type SourceFetch = (input: string | URL, init?: RequestInit) => Promise<Response>;

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { access, constants as fsConstants, mkdtemp, rm, stat } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { isAbsolute, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -28,6 +28,11 @@ export interface KetchRunOptions {
   maxRecords?: number;
   /** Override the installed ketch launcher. This is executed directly, never through a shell. */
   binary?: string;
+  /**
+   * Absolute path to an operator Ketch config.json, passed as KETCH_CONFIG.
+   * Defaults to PI_RESEARCH_KETCH_CONFIG; HOME and cache stay temporary.
+   */
+  ketchConfig?: string;
 }
 
 export interface KetchRunResult {
@@ -260,7 +265,56 @@ interface SpawnLike {
   kill(signal?: NodeJS.Signals): boolean;
 }
 
-function privateEnvironment(runtimeDir: string, explicit?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+/** Search backends that PI_RESEARCH_KETCH_BACKEND may select. */
+export const KETCH_SEARCH_BACKENDS = [
+  "brave", "ddg", "searxng", "exa", "firecrawl", "keenable", "tavily", "parallel", "serpbase", "degoog",
+] as const;
+
+/**
+ * Map an operator backend setting to Ketch search flags: one allowlisted name
+ * becomes `--backend <name>`, `multi:<a,b>` becomes `--multi=<a,b>`.
+ */
+export function ketchBackendArgs(value: string | undefined): string[] {
+  if (value === undefined || value.trim() === "") return [];
+  const allowed = new Set<string>(KETCH_SEARCH_BACKENDS);
+  const invalid = () => new KetchError(
+    `PI_RESEARCH_KETCH_BACKEND must be one of ${KETCH_SEARCH_BACKENDS.join(", ")} or multi:<comma list of those names>.`,
+    { code: "INVALID_OPTION" },
+  );
+  const setting = value.trim();
+  if (setting.startsWith("multi:")) {
+    const names = setting.slice("multi:".length).split(",").map((name) => name.trim());
+    if (names.length === 0 || names.some((name) => !allowed.has(name)) || new Set(names).size !== names.length) throw invalid();
+    return [`--multi=${names.join(",")}`];
+  }
+  if (!allowed.has(setting)) throw invalid();
+  return ["--backend", setting];
+}
+
+/** Backend flags from PI_RESEARCH_KETCH_BACKEND; empty when unset. */
+export function configuredKetchBackendArgs(env: NodeJS.ProcessEnv = process.env): string[] {
+  return ketchBackendArgs(env.PI_RESEARCH_KETCH_BACKEND);
+}
+
+/** Validate an operator Ketch config path without reading its contents. */
+export async function resolveKetchConfig(value: string | undefined): Promise<string | undefined> {
+  if (value === undefined || value.trim() === "") return undefined;
+  const invalid = (cause?: unknown) => new KetchError(
+    "PI_RESEARCH_KETCH_CONFIG must be an absolute path to a readable Ketch config file.",
+    { code: "INVALID_KETCH_CONFIG", cause },
+  );
+  if (!isAbsolute(value)) throw invalid();
+  try {
+    if (!(await stat(value)).isFile()) throw invalid();
+    await access(value, fsConstants.R_OK);
+  } catch (cause) {
+    if (cause instanceof KetchError) throw cause;
+    throw invalid(cause);
+  }
+  return value;
+}
+
+function privateEnvironment(runtimeDir: string, explicit?: NodeJS.ProcessEnv, ketchConfig?: string): NodeJS.ProcessEnv {
   const inherited: NodeJS.ProcessEnv = {};
   const names = ["PATH", "TMPDIR", "TMP", "TEMP", "LANG", "LC_ALL", "LC_CTYPE", "TERM"];
   // Windows CreateProcess can require these variables even when no user
@@ -279,6 +333,7 @@ function privateEnvironment(runtimeDir: string, explicit?: NodeJS.ProcessEnv): N
     USERPROFILE: runtimeDir,
     XDG_CONFIG_HOME: join(runtimeDir, "config"),
     XDG_CACHE_HOME: join(runtimeDir, "cache"),
+    ...(ketchConfig ? { KETCH_CONFIG: ketchConfig } : {}),
     ...(process.platform === "win32"
       ? {
           APPDATA: join(runtimeDir, "AppData", "Roaming"),
@@ -325,6 +380,7 @@ export async function runKetch(
   const fullArgs = [...resolved.prefixArgs, ...args];
 
   if (options.signal?.aborted) throw new KetchCancelledError();
+  const ketchConfig = await resolveKetchConfig(options.ketchConfig ?? process.env.PI_RESEARCH_KETCH_CONFIG);
 
   const runtimeDir = await mkdtemp(join(tmpdir(), "pi-ketch-"));
   try {
@@ -333,7 +389,7 @@ export async function runKetch(
       try {
         child = spawn(resolved.command, fullArgs, {
           cwd: options.cwd,
-          env: privateEnvironment(runtimeDir, options.env),
+          env: privateEnvironment(runtimeDir, options.env, ketchConfig),
           detached: process.platform !== "win32",
           shell: false,
           windowsHide: true,
@@ -479,12 +535,14 @@ export interface SearchEvidenceOptions {
   backend?: string;
   timeoutMs?: number;
   binary?: string;
+  ketchConfig?: string;
 }
 
 export interface FetchEvidenceOptions {
   signal?: AbortSignal;
   timeoutMs?: number;
   binary?: string;
+  ketchConfig?: string;
   maxChars?: number;
 }
 
@@ -559,6 +617,7 @@ export async function searchEvidence(
   const limit = boundedInteger(options.limit, 5, 1, 50, "limit");
   const args = ["search", "--limit", String(limit), "--json"];
   if (options.backend) args.push("--backend", options.backend);
+  else args.push(...configuredKetchBackendArgs());
   args.push("--", query);
   const result = await runKetch(args, options);
   const results = parseSearchEvidence(result.parsed);
