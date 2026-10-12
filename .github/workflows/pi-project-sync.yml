@@ -1,0 +1,40 @@
+name: Sync Pi development project
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 * * * *'
+permissions:
+  contents: read
+concurrency:
+  group: pi-development-project-sync
+  cancel-in-progress: false
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check project authentication
+        id: auth
+        env:
+          GH_TOKEN: ${{ secrets.PI_PROJECT_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo '::warning::Sync not configured: set PI_PROJECT_TOKEN with access to the owner project and matching repositories.'
+            echo 'Project sync skipped: PI_PROJECT_TOKEN has not been configured.' >> "$GITHUB_STEP_SUMMARY"
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.auth.outputs.ready == 'true'
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        if: steps.auth.outputs.ready == 'true'
+        with:
+          node-version: '22'
+      - name: Import open issues from all owner repositories beginning with pi
+        if: steps.auth.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PI_PROJECT_TOKEN }}
+        run: node scripts/sync-pi-project.mjs

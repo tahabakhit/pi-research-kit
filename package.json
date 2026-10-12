@@ -1,0 +1,42 @@
+{
+  "name": "pi-research-kit",
+  "version": "0.1.0",
+  "description": "Evidence-oriented research for Pi: Ketch retrieval, cited comparisons, source coverage, and a local research library.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {"node": ">=22.19.0"},
+  "keywords": ["pi-package", "pi-extension", "research", "ketch", "web-search"],
+  "repository": {"type": "git", "url": "git+https://github.com/tahabakhit/pi-research-kit.git"},
+  "homepage": "https://github.com/tahabakhit/pi-research-kit#readme",
+  "bugs": {"url": "https://github.com/tahabakhit/pi-research-kit/issues"},
+  "files": ["src", "skills", "README.md", "LICENSE", "NOTICE.md", "SECURITY.md", "CHANGELOG.md"],
+  "exports": {
+    ".": "./src/index.ts",
+    "./ketch/client": "./src/ketch/client.ts",
+    "./tools": "./src/tools/index.ts",
+    "./core": "./src/research/index.ts"
+  },
+  "pi": {"extensions": ["src/index.ts"], "skills": ["skills/research-kit"]},
+  "dependencies": {"ketch-cli": "0.17.1"},
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "1.1.0",
+    "@earendil-works/pi-coding-agent": "1.1.0",
+    "@types/node": "22.20.2",
+    "typebox": "1.1.38",
+    "typescript": "5.9.3"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "pack:check": "npm pack --dry-run",
+    "pack:smoke": "node scripts/pack-smoke.mjs",
+    "validate": "npm run typecheck && npm test && npm run pack:check && npm run pack:smoke",
+    "prepublishOnly": "npm run validate"
+  },
+  "publishConfig": {"access": "public"}
+}
