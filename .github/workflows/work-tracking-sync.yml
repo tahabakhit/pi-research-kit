@@ -1,5 +1,7 @@
 name: Sync domain work tracking
 on:
+  schedule:
+    - cron: '41 * * * *'
   workflow_dispatch:
     inputs:
       apply:
@@ -39,7 +41,7 @@ jobs:
       - name: Audit and synchronize without disclosing private data
         env:
           GH_TOKEN: ${{ secrets.PI_PROJECT_TOKEN }}
-          APPLY: ${{ inputs.apply && 'true' || 'false' }}
+          APPLY: ${{ (github.event_name == 'schedule' || inputs.apply) && 'true' || 'false' }}
           VERIFY_WRITE: ${{ inputs.verify_issue_write && 'true' || 'false' }}
         run: |
           set -eu
