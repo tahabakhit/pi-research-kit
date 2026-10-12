@@ -1,0 +1,48 @@
+name: Sync domain work tracking
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Apply reviewed enrollment and board changes (false is dry-run)
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: domain-work-tracking
+  cancel-in-progress: false
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Require existing hosted project credential
+        env:
+          GH_TOKEN: ${{ secrets.PI_PROJECT_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo '::error::Work tracking requires the existing Projects-capable credential.'
+            exit 1
+          fi
+      - name: Check out private canonical automation
+        uses: actions/checkout@v4
+        with:
+          repository: tahabakhit/work-tracking
+          token: ${{ secrets.PI_PROJECT_TOKEN }}
+          persist-credentials: false
+      - name: Offline regression tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Audit and synchronize without disclosing private data
+        env:
+          GH_TOKEN: ${{ secrets.PI_PROJECT_TOKEN }}
+          APPLY: ${{ inputs.apply && 'true' || 'false' }}
+        run: |
+          set -eu
+          if [ "$APPLY" = 'true' ]; then
+            python3 -m tracking audit-remote --apply
+            python3 -m tracking sync --apply
+          else
+            python3 -m tracking audit-remote
+            python3 -m tracking sync
+          fi
+          echo 'Private work-tracking audit and reconciliation completed; logs contain counts only.' >> "$GITHUB_STEP_SUMMARY"
