@@ -6,6 +6,10 @@ on:
         description: Apply reviewed enrollment and board changes (false is dry-run)
         type: boolean
         default: false
+      verify_issue_write:
+        description: Add a private credential-verification comment to the rollout receipt
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -36,6 +40,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PI_PROJECT_TOKEN }}
           APPLY: ${{ inputs.apply && 'true' || 'false' }}
+          VERIFY_WRITE: ${{ inputs.verify_issue_write && 'true' || 'false' }}
         run: |
           set -eu
           if [ "$APPLY" = 'true' ]; then
@@ -44,5 +49,8 @@ jobs:
           else
             python3 -m tracking audit-remote
             python3 -m tracking sync
+          fi
+          if [ "$VERIFY_WRITE" = 'true' ]; then
+            python3 -m tracking verify-access --issue 1 --apply
           fi
           echo 'Private work-tracking audit and reconciliation completed; logs contain counts only.' >> "$GITHUB_STEP_SUMMARY"
